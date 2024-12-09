@@ -1,2 +1,0 @@
-version,device name,recording epoch time,recording time,recording timezone,platform,appVersion,device id,sensors,sampleRateMs,standardisation
-3,iPhone 15 Pro,1733359974522,2024-12-04_00-52-54,America/New_York,ios,1.39,e0eaf9cd-7d1b-4bbb-9f11-ac7532f95c22,Accelerometer|Gyroscope|Annotation|GyroscopeUncalibrated|AccelerometerUncalibrated,10|10||10|10,false
