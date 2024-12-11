@@ -205,7 +205,7 @@ if __name__ == "__main__":
         plt.xlabel('Predicted')
         plt.ylabel('Actual')
         plt.title(f'Confusion Matrix for Sleep Position Classification ({mode.capitalize()} Mode)')
-        plt.show()
+        #plt.show()
         plt.savefig(f"confusion_matrix_{mode}")
         # Select features based on mode
         if mode == "gyro":
@@ -244,5 +244,5 @@ if __name__ == "__main__":
         plt.figure(figsize=(10,6))
         sns.barplot(x='Importance', y='Feature', data=fi_df)
         plt.title(f'Feature Importance ({mode.capitalize()} Mode)')
-        plt.show()
+        #plt.show()
         plt.savefig(f"feature_importance_{mode}")
