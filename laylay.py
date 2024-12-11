@@ -185,64 +185,75 @@ def train_position_classifier(frames, mode="all"):
     return dt_model, dt_cm, acc
 # Example usage
 if __name__ == "__main__":
-    modes = ["accel","gyro","all"]  # Set the mode you want to use
+    modes = ["accel", "gyro", "all"]  # Modes to test
     accel_root = './data/acceloremeter'
     gyro_root = './data/gyroscope'
-    for mode in modes:
-        output_file = f"combined_sleep_data_{mode}.csv"
-        
-        # Process data and extract features
-        all_data = process_combined_data(accel_root, gyro_root, output_file, window_sec=5, sample_rate=100)
-        
-        # Train the classifier using the selected mode
-        dt_model, dt_cm, acc = train_position_classifier(all_data, mode=mode)
-        
-        # Visualize confusion matrix
-        position_labels = all_data['position'].unique()
-        plt.figure(figsize=(6,4))
-        sns.heatmap(dt_cm, annot=True, fmt='d', cmap='Blues', 
-                    xticklabels=position_labels, yticklabels=position_labels)
-        plt.xlabel('Predicted')
-        plt.ylabel('Actual')
-        plt.title(f'Confusion Matrix for Sleep Position Classification ({mode.capitalize()} Mode)')
-        #plt.show()
-        plt.savefig(f"confusion_matrix_{mode}")
-        # Select features based on mode
-        if mode == "gyro":
-            features = [
-                'pitch_mean', 'pitch_std', 'roll_mean', 'roll_std',
-                'stability', 'movement_intensity'
-            ]
-        elif mode == "all":
-            features = [
-                'avg', 'max', 'med', 'min', 'q25', 'q75', 'std',
-                'pitch_mean', 'pitch_std', 'roll_mean', 'roll_std',
-                'stability', 'movement_intensity'
-            ]        
-        elif mode == "accel":
-            features = [
-                'avg', 'max', 'med', 'min', 'q25', 'q75', 'std'
-            ]
-        else:
-            raise ValueError(f"Invalid mode: {mode}. Must be 'gyro', 'accel', or 'all'")
-        
-        # Get feature importances
-        importances = dt_model.feature_importances_
-        
-        # Verify lengths match
-        if len(features) != len(importances):
-            print(f"Number of features ({len(features)}) doesn't match importance values ({len(importances)})")
-            print("Features:", features)
-            print("Importance values shape:", importances.shape)
-            raise ValueError("Feature length mismatch")
-        
-        # Create and sort DataFrame
-        fi_df = pd.DataFrame({'Feature': features, 'Importance': importances})
-        fi_df = fi_df.sort_values('Importance', ascending=False)
-        
-        # Visualize feature importance
-        plt.figure(figsize=(10,6))
-        sns.barplot(x='Importance', y='Feature', data=fi_df)
-        plt.title(f'Feature Importance ({mode.capitalize()} Mode)')
-        #plt.show()
-        plt.savefig(f"feature_importance_{mode}")
+    window_sizes = [1, 5, 15]  # Window sizes to compare
+    
+    results = []  # To store results for each configuration
+    
+    for window_sec in window_sizes:
+        for mode in modes:
+            output_file = f"combined_sleep_data_{mode}_{window_sec}s.csv"
+            
+            # Process data and extract features
+            all_data = process_combined_data(accel_root, gyro_root, output_file, window_sec=window_sec, sample_rate=100)
+            
+            # Train the classifier using the selected mode
+            dt_model, dt_cm, acc = train_position_classifier(all_data, mode=mode)
+            
+            # Save results
+            results.append({
+                'window_sec': window_sec,
+                'mode': mode,
+                'accuracy': acc,
+                'confusion_matrix': dt_cm,
+                'model': dt_model
+            })
+            
+            # Visualize confusion matrix
+            position_labels = all_data['position'].unique()
+            plt.figure(figsize=(6, 4))
+            sns.heatmap(dt_cm, annot=True, fmt='d', cmap='Blues', 
+                        xticklabels=position_labels, yticklabels=position_labels)
+            plt.xlabel('Predicted')
+            plt.ylabel('Actual')
+            plt.title(f'Confusion Matrix for Sleep Position Classification ({mode.capitalize()} Mode, {window_sec}s Window)')
+            plt.savefig(f"confusion_matrix_{mode}_{window_sec}s.png")
+            
+            # Select features based on mode
+            if mode == "gyro":
+                features = [
+                    'pitch_mean', 'pitch_std', 'roll_mean', 'roll_std',
+                    'stability', 'movement_intensity'
+                ]
+            elif mode == "all":
+                features = [
+                    'avg', 'max', 'med', 'min', 'q25', 'q75', 'std',
+                    'pitch_mean', 'pitch_std', 'roll_mean', 'roll_std',
+                    'stability', 'movement_intensity'
+                ]
+            elif mode == "accel":
+                features = [
+                    'avg', 'max', 'med', 'min', 'q25', 'q75', 'std'
+                ]
+            else:
+                raise ValueError(f"Invalid mode: {mode}. Must be 'gyro', 'accel', or 'all'")
+            
+            # Get feature importances
+            importances = dt_model.feature_importances_
+            
+            # Verify feature length
+            if len(features) != len(importances):
+                print(f"Number of features ({len(features)}) doesn't match importance values ({len(importances)})")
+                raise ValueError("Feature length mismatch")
+            
+            # Create and sort DataFrame
+            fi_df = pd.DataFrame({'Feature': features, 'Importance': importances})
+            fi_df = fi_df.sort_values('Importance', ascending=False)
+            
+            # Visualize feature importance
+            plt.figure(figsize=(10, 6))
+            sns.barplot(x='Importance', y='Feature', data=fi_df)
+            plt.title(f'Feature Importance ({mode.capitalize()} Mode, {window_sec}s Window)')
+            plt.savefig(f"feature_importance_{mode}_{window_sec}s.png")
