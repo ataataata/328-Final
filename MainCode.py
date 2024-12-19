@@ -16,39 +16,32 @@ from sklearn.tree import DecisionTreeClassifier, export_graphviz
 import seaborn as sns
 
 def load_and_merge_data(accel_file, gyro_file, sample_rate):
-    # Load accelerometer data
     accel_data = pd.read_csv(accel_file)
     gyro_data = pd.read_csv(gyro_file)
     
-    # Convert time to datetime
     accel_data['timestamp'] = pd.to_datetime(accel_data['time'], unit='ns')
     gyro_data['timestamp'] = pd.to_datetime(gyro_data['time'], unit='ns')
     
     accel_data.set_index('timestamp', inplace=True)
     gyro_data.set_index('timestamp', inplace=True)
     
-    # Rename columns for consistency
     accel_data.rename(columns={'x': 'ax', 'y': 'ay', 'z': 'az'}, inplace=True)
     gyro_data.rename(columns={'x': 'gx', 'y': 'gy', 'z': 'gz'}, inplace=True)
     
-    # Resample both to ensure same frequency and align times
     accel_data = accel_data.resample(f'{1/sample_rate}s').mean().interpolate()
     gyro_data = gyro_data.resample(f'{1/sample_rate}s').mean().interpolate()
     
-    # Merge on nearest timestamps
     merged = pd.merge_asof(accel_data.sort_index(), gyro_data.sort_index(),
                           left_index=True, right_index=True, direction='nearest')
     
     return merged
 
 def calc_magnitude(data):
-    # Calculate magnitude using accelerometer data
     data['accel_mag'] = np.sqrt(data['ax']**2 + data['ay']**2 + data['az']**2)
     data['accel_mag'] = data['accel_mag'] - data['accel_mag'].mean()  # detrend: "remove gravity"
     return data
 
 def remove_noise(data, sampling_rate):
-    # Low pass filter
     cutoff = 5  # Hz
     order = 2
     b, a = butter(order, cutoff/(sampling_rate/2), btype='lowpass')
@@ -79,18 +72,14 @@ def add_features(window):
     return pd.DataFrame([features])
 
 def extract_combined_features(data, window_sec, sample_rate, position):
-    # Compute accel magnitude, remove noise, and calculate orientation
     data = calc_magnitude(data)
     data = remove_noise(data, sample_rate)
     data = calc_orientation(data)
     
-    # Calculate tilt angle
     data = calc_tilt_angle(data)
     
-    # Add gyro magnitude
     data['gyro_mag'] = np.sqrt(data['gx']**2 + data['gy']**2 + data['gz']**2)
     
-    # Resample into windows
     window_size = f'{window_sec}s'
     resampled_data = data.resample(window_size)
     
@@ -109,13 +98,11 @@ def extract_combined_features(data, window_sec, sample_rate, position):
                 'roll_std': window['roll'].std()
             }
             
-            # Tilt angle features
             tilt_feats = {
                 'tilt_mean': window['tilt_angle'].mean(),
                 'tilt_std': window['tilt_angle'].std()
             }
             
-            # Stability and movement intensity
             mean_val = window['filtered_accel_mag'].mean() if window['filtered_accel_mag'].mean() != 0 else 1e-9
             stability = window['filtered_accel_mag'].std() / mean_val
             movement_intensity = np.sum(np.abs(np.diff(window['filtered_accel_mag'])))
@@ -155,7 +142,6 @@ def process_combined_data(accel_root, gyro_root, output_filename="combined_sleep
     return all_data
 
 def train_position_classifier(frames, mode="all"):
-    # Select features based on mode
     if mode == "gyro":
         selected_features = [
             'pitch_mean', 'pitch_std', 'roll_mean', 'roll_std',
@@ -175,7 +161,6 @@ def train_position_classifier(frames, mode="all"):
     else:
         raise ValueError(f"Invalid mode: {mode}. Must be 'gyro', 'accel', or 'all'")
 
-    # Ensure only the selected features are used
     X = frames[selected_features]
     y = frames['position']
     
@@ -183,14 +168,12 @@ def train_position_classifier(frames, mode="all"):
         X, y, test_size=0.3, random_state=42, stratify=y
     )
 
-    # Train the Decision Tree Classifier
     dt_model = DecisionTreeClassifier(
         criterion='entropy',
         max_depth=6,
         min_samples_leaf=5
     ).fit(X_train, y_train)
 
-    # Predict and evaluate
     dt_pred = dt_model.predict(X_test)
     acc = accuracy_score(y_test, dt_pred)
     
@@ -200,20 +183,16 @@ def train_position_classifier(frames, mode="all"):
 
     dt_cm = confusion_matrix(y_test, dt_pred, labels=dt_model.classes_)
 
-    # Retrieve feature importances dynamically
     feature_names = X_train.columns.tolist()
     importances = dt_model.feature_importances_
 
-    # Check for mismatch
     if len(feature_names) != len(importances):
         print(f"Number of features ({len(feature_names)}) doesn't match importance values ({len(importances)})")
         raise ValueError("Feature length mismatch")
 
-    # Create and sort DataFrame for feature importances
     fi_df = pd.DataFrame({'Feature': feature_names, 'Importance': importances})
     fi_df = fi_df.sort_values('Importance', ascending=False)
 
-    # Visualize feature importance
     plt.figure(figsize=(10, 6))
     sns.barplot(x='Importance', y='Feature', data=fi_df)
     plt.title(f'Feature Importance ({mode.capitalize()} Mode)')
@@ -222,26 +201,22 @@ def train_position_classifier(frames, mode="all"):
     return dt_model, dt_cm, acc
 
 
-# Example usage
 if __name__ == "__main__":
-    modes = ["accel", "gyro", "all"]  # Modes to test
+    modes = ["accel", "gyro", "all"]
     accel_root = './data/acceloremeter'
     gyro_root = './data/gyroscope'
-    window_sizes = [1, 5, 15]  # Window sizes to compare
+    window_sizes = [1, 5, 15]  
     
-    results = []  # To store results for each configuration
+    results = []  
     
     for window_sec in window_sizes:
         for mode in modes:
             output_file = f"combined_sleep_data_{mode}_{window_sec}s.csv"
             
-            # Process data and extract features
             all_data = process_combined_data(accel_root, gyro_root, output_file, window_sec=window_sec, sample_rate=100)
             
-            # Train the classifier using the selected mode
             dt_model, dt_cm, acc = train_position_classifier(all_data, mode=mode)
             
-            # Save results
             results.append({
                 'window_sec': window_sec,
                 'mode': mode,
@@ -250,7 +225,6 @@ if __name__ == "__main__":
                 'model': dt_model
             })
             
-            # Visualize confusion matrix
             position_labels = all_data['position'].unique()
             plt.figure(figsize=(6, 4))
             sns.heatmap(dt_cm, annot=True, fmt='d', cmap='Blues', 
@@ -260,7 +234,6 @@ if __name__ == "__main__":
             plt.title(f'Confusion Matrix for Sleep Position Classification ({mode.capitalize()} Mode, {window_sec}s Window)')
             plt.savefig(f"confusion_matrix_{mode}_{window_sec}s.png")
             
-            # Select features based on mode
             if mode == "gyro":
                 features = [
                     'pitch_mean', 'pitch_std', 'roll_mean', 'roll_std',
@@ -280,19 +253,15 @@ if __name__ == "__main__":
             else:
                 raise ValueError(f"Invalid mode: {mode}. Must be 'gyro', 'accel', or 'all'")
             
-            # Get feature importances
             importances = dt_model.feature_importances_
             
-            # Verify feature length
             if len(features) != len(importances):
                 print(f"Number of features ({len(features)}) doesn't match importance values ({len(importances)})")
                 raise ValueError("Feature length mismatch")
             
-            # Create and sort DataFrame
             fi_df = pd.DataFrame({'Feature': features, 'Importance': importances})
             fi_df = fi_df.sort_values('Importance', ascending=False)
             
-            # Visualize feature importance
             plt.figure(figsize=(10, 6))
             sns.barplot(x='Importance', y='Feature', data=fi_df)
             plt.title(f'Feature Importance ({mode.capitalize()} Mode, {window_sec}s Window)')
